@@ -1,0 +1,15 @@
+public sealed class SparkArguments
+    {
+        public SparkArguments()
+        { }
+        public SparkArguments(string file, string className, List<string> args)
+        {
+            this.file = file;
+            this.className = className;
+            this.args = args;
+        }
+
+        public string file { get; set; }
+        public string className { get; set; }
+        public List<string> args { get; set; }
+    }
