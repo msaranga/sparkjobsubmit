@@ -135,7 +135,7 @@
             var authContext = new AuthenticationContext(string.Format("https://login.windows.net/{0}", TenantID));
 
             // Get the certificate object from certificate store using the friendly name to identify it
-            X509Certificate2 cert = HiveUtility.GetCertificate();
+            X509Certificate2 cert = CertUtility.GetCertificate();
 
             if (cert != null)
             {
