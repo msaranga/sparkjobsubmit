@@ -1,0 +1,23 @@
+
+  public static class CertUtility
+    {
+    public static X509Certificate2 GetCertificate()
+        {
+            X509Store store = new X509Store();
+            store.Open(OpenFlags.ReadOnly);
+            string thumbPrint = <<Thumbprint>>;
+
+            if (string.IsNullOrWhiteSpace(thumbPrint))
+                throw new Exception("Certificate Thumbprint is empty");
+
+            try
+            {
+                 return store.Certificates.Cast<X509Certificate2>().Select(x=>x).Where(x => x.Thumbprint.ToString().Equals(thumbPrint, StringComparison.InvariantCultureIgnoreCase)).FirstOrDefault();
+            }
+            catch (Exception)
+            {
+                throw new Exception(String.Format("Unable to Find Certificate in the store. Please install certificate. {0}", thumbPrint));
+            }
+
+        }
+        }
