@@ -1,0 +1,171 @@
+ public class SparkConnector
+    {
+
+        private string clustername { get; set; }
+        private string username { get; set; }
+        private string password { get; set; }
+        public SparkConnector()
+        {
+            clustername = AppConfig.SparkClusterName;
+            var _clusterConnectivitySettings = GetClusterConnectivitySetting();
+
+            if (_clusterConnectivitySettings != null)
+            {
+                username = _clusterConnectivitySettings.HttpUsername;
+                password = _clusterConnectivitySettings.HttpPassword;
+            }
+        }
+       
+
+        public async Task<SparkResponse> getStatus(string id)
+        {
+            var client = new HttpClient();
+            var byteArray = new UTF8Encoding().GetBytes(string.Format("{0}:{1}", username, password));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+
+            // Get the response.
+            HttpResponseMessage response = await client.GetAsync(
+                string.Format("https://{0}.azurehdinsight.net/livy/batches/{1}", clustername, id));
+            HttpContent responseContent = response.Content;
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+            StringBuilder builder = new StringBuilder();
+            // Get the stream of the content.
+            using (var reader = new StreamReader(await responseContent.ReadAsStreamAsync()))
+            {
+                builder.Append(await reader.ReadToEndAsync());
+            }
+            try
+            {
+                var sparkResponse = JsonConvert.DeserializeObject<SparkResponse>(builder.ToString());
+                return sparkResponse;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+          }
+            
+       public async Task<bool> CancelSparkJob(string jobId)
+        {
+            var client = new HttpClient();
+            var byteArray = new UTF8Encoding().GetBytes(string.Format("{0}:{1}", username, password));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+
+            // Get the response.
+            HttpResponseMessage response = await client.DeleteAsync(
+                string.Format("https://{0}.azurehdinsight.net/livy/batches/{1}", clustername, jobId));
+            HttpContent responseContent = response.Content;
+            if (response.StatusCode == HttpStatusCode.OK)
+                return true;
+            else
+                return false;
+           
+        }
+        public async Task<SparkResponse> submitSparkJob(SparkArguments sparkArguments)
+        {
+            var client = new HttpClient();
+            var byteArray = new UTF8Encoding().GetBytes(string.Format("{0}:{1}", username, password));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var body = JsonConvert.SerializeObject(sparkArguments);
+            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            // Get the response.
+            HttpResponseMessage response = await client.PostAsync(
+                string.Format("https://{0}.azurehdinsight.net/livy/batches", clustername), content);
+            var sparkResponse = await parseResponse(response);
+            return sparkResponse;
+        }
+
+        public async Task<bool> CompleteSparkJob(string livyJobId)
+        {
+            bool flag = false;
+            try
+            {
+                int SleepInterval = 100;
+                var sparkResponse = await getStatus(livyJobId);
+               
+                while (sparkResponse != null)
+                {
+                    if (sparkResponse.state.Equals(SparkJobState.SUCCESS, StringComparison.OrdinalIgnoreCase))
+                    {
+                         return true;
+                    }
+                    else if (sparkResponse.state.Equals(SparkJobState.DEAD, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    Thread.Sleep(TimeSpan.FromSeconds(SleepInterval));
+                    await Task.Run(async () =>
+                    {
+                        sparkResponse = await getStatus(livyJobId);
+                    });
+                }
+
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+            return flag;
+        }
+
+       
+
+        public HttpConnectivitySettings GetClusterConnectivitySetting()
+        {
+            return GetClusterConnectivitySetting(AppConfig.SubscriptionID, AppConfig.ClientID, AppConfig.TenantID);
+        }
+        private HttpConnectivitySettings GetClusterConnectivitySetting(String SubscriptionID, string ClientID, string TenantID)
+        {
+            string ResourceGroupName = AppConfig.ResourceGroupName;
+            try
+            {
+                var creds = new TokenCloudCredentials(SubscriptionID, GetAuthenticationResult(TenantID, ClientID).AccessToken);
+                var _hdiManagementClient = new HDInsightManagementClient(creds);
+                return _hdiManagementClient.Clusters.GetConnectivitySettings(ResourceGroupName, clustername);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Problem with Certificate, Please validate token cloud crendetials" + ex);
+            }
+        }
+        private AuthenticationResult GetAuthenticationResult(string TenantID, string ClientID)
+        {
+            var authContext = new AuthenticationContext(string.Format("https://login.windows.net/{0}", TenantID));
+
+            // Get the certificate object from certificate store using the friendly name to identify it
+            X509Certificate2 cert = HiveUtility.GetCertificate();
+
+            if (cert != null)
+            {
+                var certCred = new ClientAssertionCertificate(ClientID, cert);
+                return authContext.AcquireToken("https://management.core.windows.net/", certCred);
+            }
+            return null;
+        }
+
+       
+
+        private async Task<SparkResponse> parseResponse(HttpResponseMessage response)
+        {
+            HttpContent responseContent = response.Content;
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return null;
+            StringBuilder builder = new StringBuilder();
+            using (var reader = new StreamReader(await responseContent.ReadAsStreamAsync()))
+            {
+                builder.Append(await reader.ReadToEndAsync());
+            }
+            try
+            {
+                var sparkResponse = JsonConvert.DeserializeObject<SparkResponse>(builder.ToString());
+                return sparkResponse;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+       
+    }
