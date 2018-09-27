@@ -1,0 +1,15 @@
+  public sealed class SparkResponse
+    {
+        public string id { get; set; }
+        public string state;
+        public string appId { get; set; }
+        public SparkAppInfo appInfo { get; set; }
+        public List<string> log { get; set; }
+        
+    }
+    public sealed class SparkAppInfo
+    {
+        public string driverLogUrl { get; set; }
+        public string sparkUiUrl { get; set; }
+
+    }
